@@ -16,8 +16,8 @@ public class DriveTrain {
     }
 
     /**
-     * @param forward  - left stick x (Used for strafing)
-     * @param strafe - left stick y (Used for driving)
+     * @param forward  - left stick y (Used for strafing)
+     * @param strafe - left stick x (Used for driving)
      * @param turn - right stick x (Used for turning)
      */
     public void drive(double forward, double strafe, double turn) {

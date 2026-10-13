@@ -10,6 +10,8 @@ public class RobotHardware {
     public DcMotor leftBackDrive;
     public DcMotor rightBackDrive;
 
+    public DcMotor intakeMotor;
+
     public RobotHardware(HardwareMap hardwareMap) {
         hwMap = hardwareMap;
     }
@@ -18,6 +20,7 @@ public class RobotHardware {
         rightFrontDrive = hwMap.get(DcMotor.class, "right_front_drive");
         leftBackDrive = hwMap.get(DcMotor.class, "left_back_drive");
         rightBackDrive = hwMap.get(DcMotor.class, "right_back_drive");
+        intakeMotor = hwMap.get(DcMotor.class, "intake");
 
         leftFrontDrive.setDirection(DcMotor.Direction.FORWARD);
         leftBackDrive.setDirection(DcMotor.Direction.REVERSE);
