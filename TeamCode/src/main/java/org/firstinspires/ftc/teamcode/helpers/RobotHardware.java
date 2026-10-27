@@ -10,7 +10,8 @@ public class RobotHardware {
     public DcMotor leftBackDrive;
     public DcMotor rightBackDrive;
 
-    public DcMotor intakeMotor;
+    public DcMotor shooterMotor;
+    public DcMotor shooterTurnMotor;
 
     public RobotHardware(HardwareMap hardwareMap) {
         hwMap = hardwareMap;
@@ -20,7 +21,9 @@ public class RobotHardware {
         rightFrontDrive = hwMap.get(DcMotor.class, "right_front_drive");
         leftBackDrive = hwMap.get(DcMotor.class, "left_back_drive");
         rightBackDrive = hwMap.get(DcMotor.class, "right_back_drive");
-        intakeMotor = hwMap.get(DcMotor.class, "intake");
+
+        shooterMotor = hwMap.get(DcMotor.class, "shooter_motor");
+        shooterTurnMotor = hwMap.get(DcMotor.class, "shooter_turn_motor");
 
         leftFrontDrive.setDirection(DcMotor.Direction.FORWARD);
         leftBackDrive.setDirection(DcMotor.Direction.REVERSE);
@@ -30,5 +33,9 @@ public class RobotHardware {
         rightFrontDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         leftBackDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         rightBackDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+
+        shooterTurnMotor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        shooterTurnMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        shooterTurnMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
     }
 }
