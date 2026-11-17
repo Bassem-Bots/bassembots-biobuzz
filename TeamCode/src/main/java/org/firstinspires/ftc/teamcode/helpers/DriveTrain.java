@@ -16,15 +16,15 @@ public class DriveTrain {
     }
 
     /**
-     * @param forward  - left stick y (Used for strafing)
-     * @param strafe - left stick x (Used for driving)
-     * @param turn - right stick x (Used for turning)
+     * @param forward - positive drives forward (-left stick y)
+     * @param strafe  - positive strafes right (left stick x)
+     * @param turn    - positive turns clockwise (right stick x)
      */
     public void drive(double forward, double strafe, double turn) {
-        double leftFront = forward + strafe - turn;
+        double leftFront = forward + strafe + turn;
         double rightFront = forward - strafe - turn;
         double leftBack = forward - strafe + turn;
-        double rightBack = forward + strafe + turn;
+        double rightBack = forward + strafe - turn;
 
         double[] wheels = {leftFront, rightFront, leftBack, rightBack};
         double max = 0;
