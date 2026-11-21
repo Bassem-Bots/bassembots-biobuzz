@@ -1,26 +1,22 @@
 package org.firstinspires.ftc.teamcode.teleop;
 
-import android.util.Size;
-
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.util.Range;
 
-import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
-import org.firstinspires.ftc.teamcode.helpers.DriveTrain;
+import com.pedropathing.drivetrain.DrivePowers;
+import com.pedropathing.follower.Follower;
+import com.pedropathing.api.PoseFactory;
+import com.pedropathing.math.Pose;
+
 import org.firstinspires.ftc.teamcode.helpers.IntakeShooter;
 import org.firstinspires.ftc.teamcode.helpers.RobotHardware;
 import org.firstinspires.ftc.teamcode.helpers.Turret;
 import org.firstinspires.ftc.teamcode.helpers.TurretConstants;
-import org.firstinspires.ftc.vision.VisionPortal;
-import org.firstinspires.ftc.vision.apriltag.AprilTagClusterDetection;
-import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
-import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
-
-import java.util.List;
+import org.firstinspires.ftc.teamcode.utils.pedro.Constants;
 
 /**
- * Shared TeleOp for both alliances. The turret tracks the AprilTag cluster whose
- * name starts with the alliance name, and falls back to manual control on demand.
+ * Shared TeleOp for both alliances. The turret tracks the known alliance HIVE
+ * position using Pedro localization, and falls back to manual control on demand.
  *
  * Gamepad 1:
  *   Left stick          drive / strafe
@@ -50,11 +46,9 @@ public abstract class AllianceTeleOp extends LinearOpMode {
     private final String alliance;
 
     private RobotHardware robot;
-    private DriveTrain driveTrain;
+    private Follower follower;
     private Turret turret;
     private IntakeShooter intakeShooter;
-    private VisionPortal visionPortal;
-    private AprilTagProcessor aprilTag;
 
     private TurretMode turretMode = TurretMode.TRACKING;
     private boolean lastY, lastUp, lastDown;
@@ -70,12 +64,13 @@ public abstract class AllianceTeleOp extends LinearOpMode {
         robot = new RobotHardware(hardwareMap);
         robot.init();
 
-        driveTrain = new DriveTrain(
-                robot.leftFrontDrive,
-                robot.rightFrontDrive,
-                robot.leftBackDrive,
-                robot.rightBackDrive
-        );
+        follower = Constants.create(hardwareMap);
+        PoseFactory poseFactory = alliance.equals("BLUE")
+                ? PoseFactory.degrees().mirrorY(70.25).mirrorY(70)
+                : PoseFactory.degrees();
+        follower.setPose(poseFactory.of(8, 11, 270));
+        follower.update();
+
         turret = new Turret(robot.shooterTurnMotor);
         intakeShooter = new IntakeShooter(
                 robot.shooterMotor,
@@ -83,25 +78,8 @@ public abstract class AllianceTeleOp extends LinearOpMode {
                 robot.transferMotor
         );
 
-        aprilTag = new AprilTagProcessor.Builder()
-                .setLensIntrinsics(
-                        TurretConstants.CAMERA_FX,
-                        TurretConstants.CAMERA_FY,
-                        TurretConstants.CAMERA_CX,
-                        TurretConstants.CAMERA_CY
-                )
-                .build();
-
-        visionPortal = new VisionPortal.Builder()
-                .setCamera(hardwareMap.get(WebcamName.class, TurretConstants.CAMERA_NAME))
-                .setCameraResolution(
-                        new Size(TurretConstants.CAMERA_WIDTH, TurretConstants.CAMERA_HEIGHT))
-                .setStreamFormat(VisionPortal.StreamFormat.MJPEG)
-                .addProcessor(aprilTag)
-                .build();
-
         telemetry.addLine("BIOBUZZ " + alliance + " TeleOp initialized");
-        telemetry.addLine("Turret starts in TRACKING (Y toggles MANUAL)");
+        telemetry.addLine("Turret starts in LOCALIZATION TRACKING (Y toggles MANUAL)");
         telemetry.update();
 
         waitForStart();
@@ -111,14 +89,14 @@ public abstract class AllianceTeleOp extends LinearOpMode {
 
                 updateButtons();
 
-                driveTrain.drive(
+                follower.manual(new DrivePowers(
                         -gamepad1.left_stick_y,
                         gamepad1.left_stick_x,
                         gamepad1.right_stick_x
-                );
+                ));
+                follower.update();
 
-                AprilTagClusterDetection target =
-                        findTarget(aprilTag.getDetections());
+                Pose pose = follower.pose();
 
                 if (turretMode == TurretMode.MANUAL) {
                     double input = Range.clip(
@@ -127,10 +105,15 @@ public abstract class AllianceTeleOp extends LinearOpMode {
                                     + gamepad2.left_stick_x,
                             -1, 1);
                     turret.manual(input);
-                } else if (target != null) {
-                    turret.track(target.ftcPose.bearing);
-                } else {
-                    turret.stop();
+                } else if (pose != null) {
+                    boolean scoringHalf = pose.y() > TurretConstants.FIELD_MIDLINE_Y;
+                    turret.trackToFieldTarget(
+                            TurretConstants.targetX(alliance),
+                            TurretConstants.targetY(scoringHalf),
+                            pose.x(),
+                            pose.y(),
+                            pose.heading()
+                    );
                 }
 
                 intakeShooter.update(
@@ -140,15 +123,14 @@ public abstract class AllianceTeleOp extends LinearOpMode {
                 );
                 updateIntakeServos();
 
-                addTelemetry(target);
+                addTelemetry(pose);
             }
         } finally {
-            driveTrain.stop();
+            follower.manual(DrivePowers.zero());
             turret.stop();
             intakeShooter.stop();
             robot.left_intake.setPower(0);
             robot.right_intake.setPower(0);
-            visionPortal.close();
         }
     }
 
@@ -227,18 +209,28 @@ public abstract class AllianceTeleOp extends LinearOpMode {
         robot.right_intake.setPower(power);
     }
 
-    private void addTelemetry(AprilTagClusterDetection target) {
+    private void addTelemetry(Pose pose) {
         telemetry.addData("Alliance", alliance);
         telemetry.addData("Turret Mode (Y)", turretMode);
         telemetry.addData("Shooter Power (dpad up/down)", "%.0f%%",
                 intakeShooter.getShooterPower() * 100);
         telemetry.addData("Intake/Shooter", intakeShooter.getState());
-        telemetry.addData("Target Found", target != null);
-
-        if (target != null) {
-            telemetry.addData("Cluster", target.metadata.name);
-            telemetry.addData("Bearing", "%.2f", target.ftcPose.bearing);
-            telemetry.addData("Range", "%.2f", target.ftcPose.range);
+        if (pose != null) {
+            boolean scoringHalf = pose.y() > TurretConstants.FIELD_MIDLINE_Y;
+            telemetry.addData(
+                    "Pose",
+                    "x %.1f  y %.1f  heading %.1f",
+                    pose.x(),
+                    pose.y(),
+                    Math.toDegrees(pose.heading())
+            );
+            telemetry.addData("Target Half", scoringHalf ? "SCORING" : "AUDIENCE");
+            telemetry.addData(
+                    "Target",
+                    "x %.1f  y %.1f",
+                    TurretConstants.targetX(alliance),
+                    TurretConstants.targetY(scoringHalf)
+            );
         }
 
         telemetry.addData("Turret Angle", "%.2f", turret.getDegrees());
@@ -249,43 +241,4 @@ public abstract class AllianceTeleOp extends LinearOpMode {
         telemetry.update();
     }
 
-    private AprilTagClusterDetection findTarget(List<AprilTagDetection> detections) {
-
-        AprilTagClusterDetection bestTarget = null;
-        double bestScore = Double.NEGATIVE_INFINITY;
-
-        for (AprilTagDetection detection : detections) {
-
-            if (!(detection instanceof AprilTagClusterDetection)) {
-                continue;
-            }
-
-            AprilTagClusterDetection cluster = (AprilTagClusterDetection) detection;
-
-            if (cluster.metadata == null || cluster.ftcPose == null) {
-                continue;
-            }
-
-            String name = cluster.metadata.name;
-
-            if (name == null || !name.toUpperCase().startsWith(alliance)) {
-                continue;
-            }
-
-            // Ignore upside-down (unscorable) CELLS
-            if (Math.abs(cluster.ftcPose.roll) >= 90) {
-                continue;
-            }
-
-            // Prefer a cluster with more visible tags
-            double score = cluster.percentClusterFound;
-
-            if (score > bestScore) {
-                bestScore = score;
-                bestTarget = cluster;
-            }
-        }
-
-        return bestTarget;
-    }
 }

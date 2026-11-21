@@ -14,6 +14,11 @@ public class TurretConstants {
     // Soft limits in degrees from the initialized center
     public static final double MAX_LIMIT_DEG = 180;
     public static final double MIN_LIMIT_DEG = -135;
+w
+    // BioBuzz HIVE anchors in Pedro field coordinates.
+    public static final double FIELD_MIDLINE_Y = 70.5;
+    public static final double RED_AUDIENCE_X = 57.35940;
+    public static final double RED_AUDIENCE_Y = 49.66178;
 
     // Flip to -1 if positive power turns the turret the wrong way
     public static final double POWER_SIGN = -1.0;
@@ -54,4 +59,16 @@ public class TurretConstants {
     public static final double CAMERA_FY = 545.584;
     public static final double CAMERA_CX = 350.588;
     public static final double CAMERA_CY = 223.150;
+
+    public static double targetX(String alliance) {
+        return "BLUE".equalsIgnoreCase(alliance)
+                ? 2 * FIELD_MIDLINE_Y - RED_AUDIENCE_X
+                : RED_AUDIENCE_X;
+    }
+
+    public static double targetY(boolean scoringHalf) {
+        return scoringHalf
+                ? 2 * FIELD_MIDLINE_Y - RED_AUDIENCE_Y
+                : RED_AUDIENCE_Y;
+    }
 }

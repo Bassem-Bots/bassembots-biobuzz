@@ -8,36 +8,32 @@ import org.firstinspires.ftc.teamcode.helpers.RobotHardware;
 import org.firstinspires.ftc.teamcode.helpers.Turret;
 import org.firstinspires.ftc.teamcode.helpers.TurretConstants;
 
-import org.firstinspires.ftc.vision.VisionPortal;
-import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
-import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
-import org.firstinspires.ftc.vision.apriltag.AprilTagClusterDetection;
+import com.pedropathing.api.PoseFactory;
+import com.pedropathing.drivetrain.DrivePowers;
+import com.pedropathing.follower.Follower;
+import com.pedropathing.math.Pose;
 
-import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
+import org.firstinspires.ftc.teamcode.utils.pedro.Constants;
 
-import android.util.Size;
-
-import java.util.List;
-
-@TeleOp(name = "Turret Tracking", group = "Linear Opmode")
+@TeleOp(name = "Turret Tracking (Localization)", group = "Linear Opmode")
 public class TurretTracking extends LinearOpMode {
 
     // ---------------- HARDWARE ----------------
 
     private RobotHardware robot;
+    private Follower follower;
     private Turret turret;
     private IntakeShooter intakeShooter;
-
-    // ---------------- APRILTAG VISION ----------------
-
-    private AprilTagProcessor aprilTag;
-    private VisionPortal visionPortal;
 
     @Override
     public void runOpMode() throws InterruptedException {
 
         robot = new RobotHardware(hardwareMap);
         robot.init();
+
+        follower = Constants.create(hardwareMap);
+        follower.setPose(PoseFactory.degrees().of(8, 11, 270));
+        follower.update();
 
         turret = new Turret(robot.shooterTurnMotor);
         intakeShooter = new IntakeShooter(
@@ -46,29 +42,8 @@ public class TurretTracking extends LinearOpMode {
                 robot.transferMotor
         );
 
-        // goBILDA Global Shutter USB Camera (3122-0004-0001)
-        aprilTag = new AprilTagProcessor.Builder()
-                .setLensIntrinsics(
-                        TurretConstants.CAMERA_FX,
-                        TurretConstants.CAMERA_FY,
-                        TurretConstants.CAMERA_CX,
-                        TurretConstants.CAMERA_CY
-                )
-                .build();
-
-        visionPortal = new VisionPortal.Builder()
-                .setCamera(
-                        hardwareMap.get(WebcamName.class, TurretConstants.CAMERA_NAME)
-                )
-                .setCameraResolution(
-                        new Size(TurretConstants.CAMERA_WIDTH, TurretConstants.CAMERA_HEIGHT)
-                )
-                .setStreamFormat(VisionPortal.StreamFormat.MJPEG)
-                .addProcessor(aprilTag)
-                .build();
-
         telemetry.addLine("BIOBUZZ Red Turret Initialized");
-        telemetry.addLine("Tracking RED AprilTag Clusters");
+        telemetry.addLine("Tracking RED HIVE from Pedro localization");
         telemetry.addLine("Tune: dpad up/down = kP, dpad left/right = kD,");
         telemetry.addLine("      bumpers = kS, hold A = fine steps,");
         telemetry.addLine("      B = flip tracking direction");
@@ -80,20 +55,24 @@ public class TurretTracking extends LinearOpMode {
 
         try {
             while (opModeIsActive()) {
-
-                List<AprilTagDetection> detections =
-                        aprilTag.getDetections();
-
-                AprilTagClusterDetection target =
-                        findRedTarget(detections);
-
                 updateTuning();
 
-                if (target != null) {
-                    turret.track(target.ftcPose.bearing);
-                } else {
-                    turret.stop();
-                }
+                follower.manual(new DrivePowers(
+                        -gamepad1.left_stick_y,
+                        gamepad1.left_stick_x,
+                        gamepad1.right_stick_x
+                ));
+                follower.update();
+
+                Pose pose = follower.pose();
+                boolean scoringHalf = pose.y() > TurretConstants.FIELD_MIDLINE_Y;
+                turret.trackToFieldTarget(
+                        TurretConstants.targetX("RED"),
+                        TurretConstants.targetY(scoringHalf),
+                        pose.x(),
+                        pose.y(),
+                        pose.heading()
+                );
 
                 intakeShooter.update(
                         gamepad1.left_trigger > 0.1,
@@ -103,42 +82,12 @@ public class TurretTracking extends LinearOpMode {
 
                 telemetry.addData("Intake/Shooter", intakeShooter.getState());
 
-                telemetry.addData(
-                        "Target Found",
-                        target != null
-                );
-
-                if (target != null) {
-
-                    telemetry.addData(
-                            "Cluster",
-                            target.metadata.name
-                    );
-
-                    telemetry.addData(
-                            "Bearing",
-                            "%.2f",
-                            target.ftcPose.bearing
-                    );
-
-                    telemetry.addData(
-                            "Roll",
-                            "%.2f",
-                            target.ftcPose.roll
-                    );
-
-                    telemetry.addData(
-                            "Range",
-                            "%.2f",
-                            target.ftcPose.range
-                    );
-
-                    telemetry.addData(
-                            "Cluster Visible",
-                            "%d%%",
-                            target.percentClusterFound
-                    );
-                }
+                telemetry.addData("Pose", "x %.1f  y %.1f  heading %.1f",
+                        pose.x(), pose.y(), Math.toDegrees(pose.heading()));
+                telemetry.addData("Target Half", scoringHalf ? "SCORING" : "AUDIENCE");
+                telemetry.addData("Target", "x %.1f  y %.1f",
+                        TurretConstants.targetX("RED"),
+                        TurretConstants.targetY(scoringHalf));
 
                 telemetry.addData(
                         "Turret Angle",
@@ -167,7 +116,7 @@ public class TurretTracking extends LinearOpMode {
         } finally {
             turret.stop();
             intakeShooter.stop();
-            visionPortal.close();
+            follower.manual(DrivePowers.zero());
         }
     }
 
@@ -213,51 +162,4 @@ public class TurretTracking extends LinearOpMode {
         lastRb = gamepad1.right_bumper;
     }
 
-    // ---------------- RED CLUSTER DETECTION ----------------
-
-    private AprilTagClusterDetection findRedTarget(
-            List<AprilTagDetection> detections) {
-
-        AprilTagClusterDetection bestTarget = null;
-
-        double bestScore = Double.NEGATIVE_INFINITY;
-
-        for (AprilTagDetection detection : detections) {
-
-            if (!(detection instanceof AprilTagClusterDetection)) {
-                continue;
-            }
-
-            AprilTagClusterDetection cluster =
-                    (AprilTagClusterDetection) detection;
-
-            if (cluster.metadata == null ||
-                    cluster.ftcPose == null) {
-                continue;
-            }
-
-            String name = cluster.metadata.name;
-
-            // Only track RED alliance clusters
-            if (name == null ||
-                    !name.toUpperCase().startsWith("RED")) {
-                continue;
-            }
-
-            // Ignore upside-down (unscorable) CELLS
-            if (Math.abs(cluster.ftcPose.roll) >= 90) {
-                continue;
-            }
-
-            // Prefer a cluster with more visible tags
-            double score = cluster.percentClusterFound;
-
-            if (score > bestScore) {
-                bestScore = score;
-                bestTarget = cluster;
-            }
-        }
-
-        return bestTarget;
-    }
 }

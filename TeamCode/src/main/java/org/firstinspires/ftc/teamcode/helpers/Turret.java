@@ -66,6 +66,17 @@ public class Turret {
                 TurretConstants.MAX_TRACK_POWER));
     }
 
+    public void trackToFieldTarget(
+            double targetX,
+            double targetY,
+            double robotX,
+            double robotY,
+            double robotHeadingRad) {
+        double targetBearing = Math.toDegrees(
+                robotHeadingRad - Math.atan2(targetY - robotY, targetX - robotX));
+        track(wrapDegrees(targetBearing));
+    }
+
     /** Call when the target is lost. Stops the motor and clears the PD state. */
     public void stop() {
         applyPower(0);
@@ -103,5 +114,15 @@ public class Turret {
 
     public double getPower() {
         return power;
+    }
+
+    private static double wrapDegrees(double degrees) {
+        double wrapped = degrees % 360.0;
+        if (wrapped > 180.0) {
+            wrapped -= 360.0;
+        } else if (wrapped <= -180.0) {
+            wrapped += 360.0;
+        }
+        return wrapped;
     }
 }

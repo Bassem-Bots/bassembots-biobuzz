@@ -22,7 +22,7 @@ public class TeleMain extends LinearOpMode {
 
         while (opModeIsActive()) {
             // Drivetrain control (Gamepad 1)
-//            dt.drive(gamepad1.left_stick_x, gamepad1.left_stick_y, gamepad1.right_stick_x);
+            dt.drive(gamepad1.left_stick_x, gamepad1.left_stick_y, gamepad1.right_stick_x);
 
             // Protected manual turret control (Left Stick X, soft limits enforced)
             turret.manual(gamepad1.left_stick_x);
